@@ -27,14 +27,16 @@ Shader "Hidden/Universal Render Pipeline/CameraMotionBlur"
             float4 uv            : TEXCOORD0;
             UNITY_VERTEX_OUTPUT_STEREO
         };
-
+		
         VaryingsCMB VertCMB(Attributes input)
         {
             VaryingsCMB output;
             UNITY_SETUP_INSTANCE_ID(input);
             UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
+			//转化到齐次裁剪坐标系
             output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+
 
             float4 projPos = output.positionCS * 0.5;
             projPos.xy = projPos.xy + projPos.w;
@@ -54,13 +56,46 @@ Shader "Hidden/Universal Render Pipeline/CameraMotionBlur"
         // Per-pixel camera velocity
         float2 GetCameraVelocity(float4 uv)
         {
+
+			//采样范围是(0, 1)
             float depth = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, sampler_PointClamp, uv.xy).r;
 
         #if UNITY_REVERSED_Z
             depth = 1.0 - depth;
         #endif
 
+			//映射到(-1, 1)
             depth = 2.0 * depth - 1.0;
+
+			/*
+			float3 ComputeViewSpacePosition(float2 positionNDC, float deviceDepth, float4x4 invProjMatrix)
+{
+	float4 positionCS = ComputeClipSpacePosition(positionNDC, deviceDepth);
+
+	//invProjMatrix是其次裁剪坐标系转为视觉坐标系
+	float4 positionVS = mul(invProjMatrix, positionCS);
+	// The view space uses a right-handed coordinate system.
+	positionVS.z = -positionVS.z;
+	return positionVS.xyz / positionVS.w;
+}
+
+float4 ComputeClipSpacePosition(float2 positionNDC, float deviceDepth)
+{
+	//把（0,1）映射到（-1,1），positionCS是
+	float4 positionCS = float4(positionNDC * 2.0 - 1.0, deviceDepth, 1.0);
+
+#if UNITY_UV_STARTS_AT_TOP
+	// Our world space, view space, screen space and NDC space are Y-up.
+	// Our clip space is flipped upside-down due to poor legacy Unity design.
+	// The flip is baked into the projection matrix, so we only have to flip
+	// manually when going from CS to NDC and back.
+	positionCS.y = -positionCS.y;
+#endif
+
+	return positionCS;
+}
+
+			*/
 
             float3 viewPos = ComputeViewSpacePosition(uv.zw, depth, unity_CameraInvProjection);
             float4 worldPos = float4(mul(unity_CameraToWorld, float4(viewPos, 1.0)).xyz, 1.0);
